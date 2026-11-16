@@ -8,7 +8,7 @@ import { redirect } from "next/navigation";
 import { getAccessState } from "@/lib/invitations";
 import { adminAllowed, isPortal } from "@/lib/mode";
 import { getDb } from "@/lib/mongodb";
-import { findUserById, type UserDocument, type UserKind } from "@/lib/users";
+import { type UserDocument, type UserKind } from "@/lib/users";
 
 import { SESSION_COOKIE } from "@/lib/session-cookie";
 
