@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { findUsersByIds, type UserKind } from "@/lib/users";
@@ -121,10 +122,10 @@ export type Access = { project: ProjectDocument; role: MemberRole };
 export async function projectAccess(user: Pick<CurrentUser, "oid" | "isAdmin">, projectId: string | ObjectId): Promise<Access | null> {
   const id = typeof projectId === "string" ? parseId(projectId) : projectId;
   if (!id) return null;
-  const project = await (await projectsCol()).findOne({ _id: id });
+  // A projekt és a tagság egyszerre kérdezhető le.
+  const [project, member] = await Promise.all([(await projectsCol()).findOne({ _id: id }), user.isAdmin ? null : (await membersCol()).findOne({ projectId: id, userId: user.oid })]);
   if (!project) return null;
   if (user.isAdmin) return { project, role: "vezeto" };
-  const member = await (await membersCol()).findOne({ projectId: id, userId: user.oid });
   return member ? { project, role: member.role } : null;
 }
 
@@ -146,52 +147,75 @@ export function todayKey(now = new Date()) {
 export const isOverdue = (task: Pick<TaskDocument, "dueDate" | "status">, today = todayKey()) =>
   Boolean(task.dueDate && task.status !== "kesz" && task.dueDate < today);
 
-/** A felhasználó számára látható projektek összesítővel. */
-export async function listProjects(user: Pick<CurrentUser, "oid" | "isAdmin">): Promise<ProjectSummary[]> {
-  const projects = await (await projectsCol()).find(
-    user.isAdmin
-      ? {}
-      : { _id: { $in: (await (await membersCol()).find({ userId: user.oid }).toArray()).map((member) => member.projectId) } },
-  ).sort({ updatedAt: -1 }).toArray();
+/**
+ * A felhasználó számára látható projektek összesítővel. Kérésenként egyszer számolódik (React `cache`), és az összesítést
+ * az adatbázis végzi (csoportosítással), így nem kell a feladatokat egyenként áthozni.
+ */
+const projectSummaries = cache(async (userId: string, isAdmin: boolean): Promise<ProjectSummary[]> => {
+  const userOid = new ObjectId(userId);
+  const myMembers = await (await membersCol()).find({ userId: userOid }).toArray();
+  const roleOf = new Map(myMembers.map((member) => [String(member.projectId), member.role]));
+
+  const projects = await (await projectsCol())
+    .find(isAdmin ? {} : { _id: { $in: myMembers.map((member) => member.projectId) } })
+    .sort({ updatedAt: -1 })
+    .toArray();
   if (!projects.length) return [];
 
   const ids = projects.map((project) => project._id);
-  const [members, tasks, myMembers] = await Promise.all([
-    (await membersCol()).find({ projectId: { $in: ids } }, { projection: { projectId: 1 } }).toArray(),
-    (await tasksCol()).find({ projectId: { $in: ids } }, { projection: { projectId: 1, status: 1, dueDate: 1, assigneeId: 1 } }).toArray(),
-    (await membersCol()).find({ projectId: { $in: ids }, userId: user.oid }).toArray(),
-  ]);
   const today = todayKey();
-  const roleOf = new Map(myMembers.map((member) => [String(member.projectId), member.role]));
+  const [memberRows, taskRows] = await Promise.all([
+    (await membersCol()).aggregate<{ _id: ObjectId; count: number }>([{ $match: { projectId: { $in: ids } } }, { $group: { _id: "$projectId", count: { $sum: 1 } } }]).toArray(),
+    (await tasksCol())
+      .aggregate<{ _id: ObjectId; total: number; done: number; overdue: number; mine: number }>([
+        { $match: { projectId: { $in: ids } } },
+        {
+          $group: {
+            _id: "$projectId",
+            total: { $sum: 1 },
+            done: { $sum: { $cond: [{ $eq: ["$status", "kesz"] }, 1, 0] } },
+            overdue: { $sum: { $cond: [{ $and: [{ $ne: ["$status", "kesz"] }, { $lt: [{ $ifNull: ["$dueDate", "9999"] }, today] }] }, 1, 0] } },
+            mine: { $sum: { $cond: [{ $and: [{ $ne: ["$status", "kesz"] }, { $eq: ["$assigneeId", userOid] }] }, 1, 0] } },
+          },
+        },
+      ])
+      .toArray(),
+  ]);
+  const members = new Map(memberRows.map((row) => [String(row._id), row.count]));
+  const stats = new Map(taskRows.map((row) => [String(row._id), row]));
 
   return projects.map((project) => {
-    const own = tasks.filter((task) => task.projectId.equals(project._id));
+    const row = stats.get(String(project._id));
     return {
       project,
-      role: user.isAdmin ? "vezeto" : (roleOf.get(String(project._id)) ?? "megtekinto"),
-      memberCount: members.filter((member) => member.projectId.equals(project._id)).length,
-      total: own.length,
-      done: own.filter((task) => task.status === "kesz").length,
-      overdue: own.filter((task) => isOverdue(task as TaskDocument, today)).length,
-      mine: own.filter((task) => task.status !== "kesz" && task.assigneeId?.equals(user.oid)).length,
+      role: isAdmin ? "vezeto" : (roleOf.get(String(project._id)) ?? "megtekinto"),
+      memberCount: members.get(String(project._id)) ?? 0,
+      total: row?.total ?? 0,
+      done: row?.done ?? 0,
+      overdue: row?.overdue ?? 0,
+      mine: row?.mine ?? 0,
     };
   });
+});
+
+export function listProjects(user: Pick<CurrentUser, "oid" | "isAdmin">) {
+  return projectSummaries(String(user.oid), user.isAdmin);
 }
 
 export type MemberView = { userId: string; name: string; email: string; role: MemberRole; kind: UserKind; isOwner: boolean };
 
 export async function listMembers(project: ProjectDocument): Promise<MemberView[]> {
-  const members = await (await membersCol()).find({ projectId: project._id }).sort({ addedAt: 1 }).toArray();
-  const people = await findUsersByIds(members.map((member) => member.userId));
-  const byId = new Map(people.map((person) => [String(person._id), person]));
-  return members
-    .map((member) => {
-      const person = byId.get(String(member.userId));
-      return person
-        ? { userId: String(member.userId), name: person.name, email: person.email, role: member.role, kind: person.kind, isOwner: member.userId.equals(project.ownerId) }
-        : null;
-    })
-    .filter((member): member is MemberView => member !== null);
+  const rows = await (await membersCol())
+    .aggregate<MemberDocument & { person?: { name: string; email: string; kind: UserKind } }>([
+      { $match: { projectId: project._id } },
+      { $sort: { addedAt: 1 } },
+      { $lookup: { from: "users", localField: "userId", foreignField: "_id", pipeline: [{ $project: { name: 1, email: 1, kind: 1 } }], as: "person" } },
+      { $set: { person: { $first: "$person" } } },
+    ])
+    .toArray();
+  return rows.flatMap((row) =>
+    row.person ? [{ userId: String(row.userId), name: row.person.name, email: row.person.email, role: row.role, kind: row.person.kind, isOwner: row.userId.equals(project.ownerId) }] : [],
+  );
 }
 
 /** Tevékenységnapló-bejegyzés; a naplózás hibája nem akaszthat meg semmit. */

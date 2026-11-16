@@ -1,28 +1,21 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { SESSION_COOKIE, validateSessionToken } from "@/lib/session";
+import { SESSION_COOKIE } from "@/lib/session-cookie";
 
 // Belépés nélkül is elérhető oldalak; a jogosultságot maguk ellenőrzik.
-const PUBLIC_PATHS = ["/login", "/regisztracio"];
-// A meghívó- és jelszó-visszaállító link belépve és kilépve is megnyitható (az e-mailből érkezik).
-const OPEN_PATHS = ["/meghivo", "/jelszo-visszaallitas"];
+const PUBLIC_PATHS = ["/login", "/regisztracio", "/meghivo", "/jelszo-visszaallitas"];
 
-export async function proxy(request: NextRequest) {
-  const token = request.cookies.get(SESSION_COOKIE)?.value;
-  // Adatbázishiba esetén a kérés nem kap hozzáférést.
-  const session = await validateSessionToken(token).catch(() => null);
-  const signedIn = Boolean(session);
+/**
+ * Gyors, adatbázis nélküli előszűrő: süti nélkül a belépőoldalra küld. A munkamenet tényleges érvényességét
+ * (lejárat, visszavonás, jogosultság) minden védett oldal és szerverművelet maga ellenőrzi a `requireUser`-rel.
+ */
+export function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
-  if (OPEN_PATHS.includes(path)) return NextResponse.next();
-  const isPublic = PUBLIC_PATHS.includes(path);
-
-  if (!signedIn && !isPublic) {
+  if (PUBLIC_PATHS.includes(path)) return NextResponse.next();
+  if (!request.cookies.get(SESSION_COOKIE)?.value) {
     const url = new URL("/login", request.url);
     if (path !== "/") url.searchParams.set("next", path + request.nextUrl.search);
     return NextResponse.redirect(url);
-  }
-  if (signedIn && isPublic) {
-    return NextResponse.redirect(new URL("/", request.url));
   }
   return NextResponse.next();
 }

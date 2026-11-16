@@ -79,7 +79,8 @@ export async function geminiAgent({
       contents,
       // Az utolsó lépésben már nem engedünk eszközt, hogy mindenképp szöveges válasz szülessen.
       ...(!lastStep && { tools: [{ functionDeclarations: tools }], toolConfig: { functionCallingConfig: { mode: "AUTO" } } }),
-      generationConfig: { maxOutputTokens: maxTokens },
+      // A gondolkodási keret korlátozása jelentősen gyorsítja a választ, és nem eszi el a válasz tokenjeit.
+      generationConfig: { maxOutputTokens: maxTokens, thinkingConfig: { thinkingBudget: step === 0 ? 512 : 0 } },
     });
     const response = await callModel(model, body, deadline);
 

@@ -13,17 +13,29 @@ function isConfigured(uri?: string): uri is string {
 async function connect(uri: string) {
   const client = await new MongoClient(uri, {
     serverSelectionTimeoutMS: 5000,
+    maxPoolSize: 20,
+    maxIdleTimeMS: 60_000,
     tls: true,
   }).connect();
 
   const db = client.db(process.env.MONGODB_DB);
-  await Promise.all([
+  // Az indexek létrehozása nem tartja fel a kéréseket (hidegindításnál ez sok időt vinne el); hibája nem végzetes.
+  void Promise.all([
     db.collection("sessions").createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
     db.collection("sessions").createIndex({ userId: 1 }),
     db.collection("login_throttle").createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
     db.collection("audit_log").createIndex({ userId: 1, at: -1 }),
     db.collection("users").createIndex({ email: 1 }, { unique: true }),
-  ]);
+    db.collection("members").createIndex({ projectId: 1, userId: 1 }, { unique: true }),
+    db.collection("members").createIndex({ userId: 1 }),
+    db.collection("tasks").createIndex({ projectId: 1, status: 1 }),
+    db.collection("tasks").createIndex({ assigneeId: 1 }),
+    db.collection("comments").createIndex({ taskId: 1, createdAt: 1 }),
+    db.collection("activity").createIndex({ projectId: 1, at: -1 }),
+    db.collection("project_invites").createIndex({ tokenHash: 1 }),
+    db.collection("project_invites").createIndex({ projectId: 1 }),
+    db.collection("project_invites").createIndex({ email: 1 }),
+  ]).catch((error) => console.error("Indexek:", (error as Error).name));
   return client;
 }
 
