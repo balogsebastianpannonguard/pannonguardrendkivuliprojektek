@@ -6,6 +6,7 @@ import { CircleAlert, MailCheck } from "lucide-react";
 import { AuthShell } from "@/components/auth-shell";
 import { RegisterForm } from "@/components/register-form";
 import { checkInvitationToken } from "@/lib/invitations";
+import { isPortal } from "@/lib/mode";
 
 export const metadata: Metadata = { title: "Regisztráció" };
 
@@ -35,6 +36,19 @@ async function Registration({ searchParams }: Pick<PageProps<"/regisztracio">, "
   const { token } = await searchParams;
   // A link érvényessége időfüggő, ezért csak kérésidőben ellenőrizhető.
   await connection();
+  if (isPortal) {
+    return (
+      <div className="space-y-5">
+        <div className="flex gap-3 rounded-2xl border border-amber-300/25 bg-amber-300/8 p-4 text-sm text-amber-100">
+          <CircleAlert size={19} aria-hidden className="mt-0.5 shrink-0 text-amber-300" />
+          <p>Itt nem lehet regisztrálni. A munkatársi portálra a projektmeghívó levélben kapott linkkel csatlakozhatsz.</p>
+        </div>
+        <Link href="/login" className="inline-block text-sm text-volt underline underline-offset-4">
+          Tovább a belépéshez
+        </Link>
+      </div>
+    );
+  }
   const check =
     typeof token === "string"
       ? await checkInvitationToken(token).catch(() => null)

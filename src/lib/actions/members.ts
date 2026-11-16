@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { issueLocalReset } from "@/lib/auth-actions";
 import { type FormState } from "@/lib/form";
+import { PORTAL_URL, isPortal } from "@/lib/mode";
 import { appBaseUrl } from "@/lib/project-mail";
 import {
   MEMBER_ROLES,
@@ -103,5 +104,5 @@ export async function memberResetLink(userId: string): Promise<{ error?: string;
   if (!target) return { error: "A felhasználó nem található." };
   if (target.kind === "admin") return { error: "Adminisztrátor jelszavát az Elosztóból lehet visszaállítani." };
   const token = await issueLocalReset(target._id);
-  return { link: `${appBaseUrl(await origin())}/jelszo-visszaallitas?token=${token}`, email: target.email };
+  return { link: `${!isPortal && PORTAL_URL ? PORTAL_URL : appBaseUrl(await origin())}/jelszo-visszaallitas?token=${token}`, email: target.email };
 }

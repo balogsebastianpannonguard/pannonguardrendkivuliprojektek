@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { connection } from "next/server";
 import { redirect } from "next/navigation";
 import { getAccessState } from "@/lib/invitations";
+import { adminAllowed, isPortal } from "@/lib/mode";
 import { getDb } from "@/lib/mongodb";
 import { findUserById, type UserKind } from "@/lib/users";
 
@@ -101,7 +102,9 @@ export async function requireUser(): Promise<CurrentUser & { session: Session }>
   const session = await getSession();
   if (!session) redirect("/login");
   const user = await findUserById(session.userId);
-  let revoked = !user || Boolean(user.disabledAt);
+  // Az admin felületre csak a jogosult admin, a portálra csak a meghívott tagok léphetnek be.
+  const wrongPlace = user ? (isPortal ? user.kind !== "tag" : user.kind !== "admin" || !adminAllowed(user.email)) : false;
+  let revoked = !user || Boolean(user.disabledAt) || wrongPlace;
   if (user && user.kind === "admin" && user.invitationId) {
     revoked = revoked || (await getAccessState(user.invitationId)).revoked;
   }

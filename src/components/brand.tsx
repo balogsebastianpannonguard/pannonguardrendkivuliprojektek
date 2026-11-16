@@ -14,7 +14,7 @@ export function Brand({ size = "md" }: { size?: "md" | "lg" }) {
       <p className="leading-tight">
         <span className={`block font-display ${size === "lg" ? "text-lg" : ""}`}>PannonGuard</span>
         <span className="block text-[0.6rem] font-semibold tracking-[0.22em] text-volt uppercase">
-          Rendkívüli projekt
+          {process.env.APP_MODE === "portal" ? "Munkatársi portál" : "Rendkívüli projekt"}
         </span>
       </p>
     </div>

@@ -2,6 +2,7 @@ import "server-only";
 import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { createInvite, addMember } from "@/lib/project-invites";
+import { PORTAL_URL, isPortal } from "@/lib/mode";
 import { appBaseUrl, sendProjectInvite } from "@/lib/project-mail";
 import {
   MEMBER_ROLES,
@@ -201,7 +202,8 @@ export async function inviteOp(
   }
 
   const { token, invite } = await createInvite(access.project, email.data, role, user.oid);
-  const link = `${appBaseUrl(origin)}/meghivo?token=${token}`;
+  // A meghívó mindig a munkatársi portálra mutat (az admin felületre a tagok nem léphetnek be).
+  const link = `${!isPortal && PORTAL_URL ? PORTAL_URL : appBaseUrl(origin)}/meghivo?token=${token}`;
   const failure = await sendProjectInvite({
     to: email.data,
     link,

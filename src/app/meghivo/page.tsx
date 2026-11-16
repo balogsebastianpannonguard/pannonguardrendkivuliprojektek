@@ -8,6 +8,8 @@ import { AcceptInvite } from "@/components/accept-invite";
 import { RegisterForm } from "@/components/register-form";
 import { MEMBER_ROLES } from "@/lib/projects";
 import { checkInvite } from "@/lib/project-invites";
+import { PORTAL_URL, isPortal } from "@/lib/mode";
+import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 import { findUserByEmail, findUserById } from "@/lib/users";
 
@@ -39,6 +41,16 @@ async function Invitation({ searchParams }: Pick<PageProps<"/meghivo">, "searchP
   const { token } = await searchParams;
   // A link érvényessége időfüggő, ezért csak kérésidőben ellenőrizhető.
   await connection();
+  if (!isPortal) {
+    // A meghívót a munkatársi portálon kell megnyitni; az admin felületre a tagok nem léphetnek be.
+    if (PORTAL_URL && typeof token === "string") redirect(`${PORTAL_URL}/meghivo?token=${encodeURIComponent(token)}`);
+    return (
+      <div className="flex gap-3 rounded-2xl border border-amber-300/25 bg-amber-300/8 p-4 text-sm text-amber-100">
+        <CircleAlert size={19} aria-hidden className="mt-0.5 shrink-0 text-amber-300" />
+        <p>Ezt a meghívót a munkatársi portálon kell megnyitni. Használd a levélben kapott linket.</p>
+      </div>
+    );
+  }
   const check = typeof token === "string" ? await checkInvite(token).catch(() => null) : ({ status: "invalid" } as const);
 
   if (!check || check.status !== "valid") {

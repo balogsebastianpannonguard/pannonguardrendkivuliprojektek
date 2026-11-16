@@ -2,6 +2,10 @@
 
 Projektmenedzsment-alrendszer a PannonGuard Komplexben. Egy adminisztrátor projekteket hoz létre, és meghívja beléjük azokat, akikkel együtt dolgozik; a projekteken belül feladatok, felelősök, határidők és megjegyzések vannak. **Kétlépcsős azonosítás nincs**, a belépés e-mail-cím + jelszó.
 
+## Két telepítés
+
+Ugyanaz a kód két külön címen fut. Az **admin felületre** (`APP_MODE` nincs megadva) csak az `ADMIN_EMAILS`-ben megadott cím léphet be; itt hozod létre a projekteket, és innen hívsz meg embereket. A meghívottak a **munkatársi portálra** (`APP_MODE=portal`, saját cím) kapnak linket, és csak oda léphetnek be – az admin felületre nem. Mindkét telepítés ugyanazt az adatbázist használja, így az admin látja, amit a tagok csinálnak.
+
 ## Működés
 
 - **Adminisztrátor:** az Elosztóban a `Rendkívüli projekt` munkakörre küldött meghívó regisztrációs linkje ide mutat (`/regisztracio?token=…`). Az admin minden projektet lát és kezel, és csak ő hozhat létre vagy törölhet projektet. Jelszavát az Elosztóból lehet visszaállítani.
@@ -19,6 +23,10 @@ Projektmenedzsment-alrendszer a PannonGuard Komplexben. Egy adminisztrátor proj
 | `INVITES_DB` | Az Elosztó adatbázisa (`pannonguard_eloszto`) |
 | `GEMINI_API_KEY` | Pajzsi (Google Gemini) |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `EMAIL_USER`, `EMAIL_PASS` | Meghívó levelek és hibabejelentés |
+| `APP_MODE` | `admin` (alapértelmezett) vagy `portal`: ugyanaz a kód két telepítésben fut |
+| `ADMIN_EMAILS` | Az admin felületre jogosult e-mail-címek (vesszővel); csak ezek regisztrálhatnak és léphetnek be az admin telepítésben |
+| `PORTAL_URL` | A munkatársi portál címe (az admin telepítés ide irányítja a meghívó-linkeket) |
+| `ADMIN_URL` | Az admin felület címe (a portálon) |
 | `APP_URL` | (opcionális) az alkalmazás nyilvános címe a meghívó-linkekhez |
 | `TICKET_TO` | (opcionális) a bejelentéseket fogadó cím |
 

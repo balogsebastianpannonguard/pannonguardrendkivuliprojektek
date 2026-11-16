@@ -5,6 +5,7 @@ import { ObjectId } from "mongodb";
 import { redirect } from "next/navigation";
 import { recordAudit } from "@/lib/audit";
 import { addEvent, checkInvitationToken, checkResetToken, markLogin, redeemInvitation, redeemResetToken, undoRedeem, getAccessState } from "@/lib/invitations";
+import { ADMIN_URL, PORTAL_URL, adminAllowed, isPortal } from "@/lib/mode";
 import { hashPassword, passwordProblem, verifyPassword } from "@/lib/password";
 import { addMember, checkInvite, redeemInvite } from "@/lib/project-invites";
 import { logActivity } from "@/lib/projects";
@@ -27,8 +28,10 @@ export async function register(_previous: RegisterState, formData: FormData): Pr
   const confirm = field(formData, "confirm");
 
   try {
+    if (isPortal) return { error: "Itt nem lehet adminisztrátori fiókot nyitni.", name };
     const invitation = await checkInvitationToken(token);
     if (invitation.status !== "valid") return { error: "Ez a meghívó már nem érvényes. Kérj újat az adminisztrátortól.", name };
+    if (!adminAllowed(invitation.email)) return { error: "Ehhez a felülethez ez a cím nem jogosult.", name };
     if (!validName(name)) return { error: NAME_ERROR, name };
     const problem = passwordProblem(password, invitation.email);
     if (problem) return { error: problem, name };
@@ -78,6 +81,7 @@ export async function joinWithInvite(_previous: RegisterState, formData: FormDat
   let projectId: ObjectId;
 
   try {
+    if (!isPortal) return { error: "A meghívót a munkatársi portálon kell megnyitni.", name };
     const check = await checkInvite(token);
     if (check.status !== "valid") return { error: "Ez a meghívó már nem érvényes. Kérj újat attól, aki meghívott.", name };
     if (await findUserByEmail(check.invite.email)) return { error: "Ezzel az e-mail-címmel már van fiókod. Lépj be, és fogadd el a meghívót.", name };
@@ -159,6 +163,12 @@ export async function login(_previous: LoginState, formData: FormData): Promise<
       return { email, error: "Hibás e-mail-cím vagy jelszó." };
     }
     if (user.disabledAt) return { email, error: "A hozzáférésedet letiltották. Fordulj a projektvezetőhöz." };
+    if (isPortal && user.kind !== "tag") {
+      return { email, error: `Ez a belépés a meghívott munkatársaknak szól.${ADMIN_URL ? " Az adminisztrátori felület címe másik." : ""}` };
+    }
+    if (!isPortal && (user.kind !== "admin" || !adminAllowed(user.email))) {
+      return { email, error: `Ez a felület nem a munkatársaké. A saját belépőoldalad a meghívó levélben kapott portál${PORTAL_URL ? `: ${PORTAL_URL}` : ""}.` };
+    }
     if (user.kind === "admin" && user.invitationId) {
       if ((await getAccessState(user.invitationId)).revoked) return { email, error: "A hozzáférésedet visszavonták." };
       await markLogin(user.invitationId);

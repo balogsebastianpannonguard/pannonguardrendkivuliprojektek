@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { AuthShell } from "@/components/auth-shell";
 import { LoginForm } from "@/components/login-form";
+import { isPortal } from "@/lib/mode";
 
 export const metadata: Metadata = { title: "Belépés" };
 
@@ -16,9 +17,13 @@ export default function LoginPage({ searchParams }: PageProps<"/login">) {
   return (
     <AuthShell
       eyebrow="Belépés"
-      title="Rendkívüli feladatok,"
-      accent="rendkívüli csapat."
-      intro="Lépj be az e-mail-címeddel és a jelszavaddal, és folytasd ott, ahol abbahagytad."
+      title={isPortal ? "Üdv a csapatban," : "Rendkívüli feladatok,"}
+      accent={isPortal ? "dolgozzunk együtt." : "rendkívüli csapat."}
+      intro={
+        isPortal
+          ? "Lépj be az e-mail-címeddel és a jelszavaddal, és nézd meg a projektjeidet és a rád váró feladatokat."
+          : "Lépj be az e-mail-címeddel és a jelszavaddal, és folytasd ott, ahol abbahagytad."
+      }
     >
       <Suspense fallback={<LoginForm />}>
         <LoginWithNotice searchParams={searchParams} />
