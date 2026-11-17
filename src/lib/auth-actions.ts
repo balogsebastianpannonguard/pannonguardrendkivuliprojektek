@@ -56,9 +56,15 @@ export async function register(_previous: RegisterState, formData: FormData): Pr
       });
       userId = inserted.insertedId;
     } catch (error) {
-      await undoRedeem(redeemed._id);
       const duplicate = (error as { code?: number }).code === 11000;
-      return { error: duplicate ? "Ezzel az e-mail-címmel már van fiók. Lépj be inkább." : "A regisztráció átmenetileg nem érhető el.", name };
+      const reclaimed = duplicate
+        ? await reclaimOrphanedAdmin(redeemed.email, redeemed._id, redeemed.invitedBy, name, passwordHash)
+        : null;
+      if (!reclaimed) {
+        await undoRedeem(redeemed._id);
+        return { error: duplicate ? "Ezzel az e-mail-címmel már van fiók. Lépj be inkább." : "A regisztráció átmenetileg nem érhető el.", name };
+      }
+      userId = reclaimed;
     }
 
     await Promise.all([markLogin(redeemed._id), recordAudit("register", redeemed.email, userId)]);
@@ -69,6 +75,26 @@ export async function register(_previous: RegisterState, formData: FormData): Pr
     return { error: "A regisztráció átmenetileg nem érhető el.", name };
   }
   redirect("/?udv=1");
+}
+
+/**
+ * Ha a címhez régebbi adminfiók tartozik, amelynek a meghívóját az Elosztóban törölték (vagy vissza van vonva),
+ * az új, érvényes meghívó beváltása újraindítja a fiókot: új jelszó, tiszta munkamenetek.
+ * Tagfiókot és élő hozzáférésű fiókot nem vesz át.
+ */
+async function reclaimOrphanedAdmin(email: string, invitationId: ObjectId, invitedBy: string, name: string, passwordHash: string) {
+  const existing = await findUserByEmail(email);
+  if (!existing || existing.kind !== "admin" || !existing.invitationId || existing.invitationId.equals(invitationId)) return null;
+  if (!(await getAccessState(existing.invitationId)).revoked) return null;
+
+  const updated = await (await users()).findOneAndUpdate(
+    { _id: existing._id, invitationId: existing.invitationId },
+    { $set: { name, passwordHash, invitationId, invitedBy, createdAt: new Date(), lastLoginAt: new Date() }, $unset: { disabledAt: "" } },
+  );
+  if (!updated) return null;
+  await destroyAllSessions(existing._id);
+  await clearAttempts(`login:${existing.email}`);
+  return existing._id;
 }
 
 /* ---------- Csatlakozás projektmeghívóval (közreműködő) ---------- */
