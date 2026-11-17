@@ -38,3 +38,13 @@ export const isMemberRole = (value: string): value is MemberRole => value in MEM
 export const isTaskStatus = (value: string): value is TaskStatus => value in TASK_STATUS;
 export const isTaskPriority = (value: string): value is TaskPriority => value in TASK_PRIORITY;
 
+
+/* ---------- Projektindítási kérvények ---------- */
+
+export const REQUEST_STATUS = {
+  fuggo: { label: "Elbírálásra vár", tone: "warning" },
+  jovahagyva: { label: "Jóváhagyva", tone: "ok" },
+  elutasitva: { label: "Elutasítva", tone: "error" },
+  visszavonva: { label: "Visszavonva", tone: "muted" },
+} as const;
+export type RequestStatus = keyof typeof REQUEST_STATUS;

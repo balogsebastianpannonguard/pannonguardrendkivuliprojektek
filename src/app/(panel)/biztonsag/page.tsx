@@ -82,7 +82,7 @@ async function Security() {
           <dl className="mt-4 space-y-3 text-sm">
             <Row label="Név" value={user.name} />
             <Row label="E-mail" value={user.email} />
-            <Row label="Hozzáférés" value={user.isAdmin ? "Adminisztrátor" : "Közreműködő (meghívóval)"} />
+            <Row label="Hozzáférés" value={user.isAdmin ? "Adminisztrátor" : "Felhasználó (saját projektek)"} />
             <Row label="Meghívott" value={user.invitedBy} />
             <Row label="Regisztrált" value={formatStamp(user.createdAt)} />
           </dl>
@@ -100,7 +100,7 @@ async function Security() {
           </div>
           <p className="mt-4 text-sm leading-relaxed text-white/55">
             Ez az alrendszer kétlépcsős azonosítás nélkül működik, ezért használj hosszú, másutt nem használt jelszót. Elfelejtett
-            jelszóhoz {user.isAdmin ? "az Elosztóban kérhetsz visszaállító linket" : "az adminisztrátor küld visszaállító linket"}.
+            jelszóhoz {user.viaHub ? "az Elosztóban kérhetsz visszaállító linket" : "az adminisztrátor küld visszaállító linket"}.
           </p>
         </section>
 

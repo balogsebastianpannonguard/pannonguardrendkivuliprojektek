@@ -5,6 +5,7 @@ import { PageTitle } from "@/components/page-title";
 import { ProjectCard } from "@/components/project-card";
 import { ProjectForm } from "@/components/project-form";
 import { Empty, Panel, Skeleton } from "@/components/ui";
+import { LinkButton } from "@/components/ui";
 import { listProjects } from "@/lib/projects";
 import { requireUser } from "@/lib/session";
 
@@ -14,7 +15,7 @@ export default function ProjectsPage() {
   return (
     <div className="space-y-8">
       <PageTitle eyebrow="Projektek" title="Minden rendkívüli feladat" accent="egy helyen.">
-        Itt látod azokat a projekteket, amelyekben részt veszel. Új projektet az adminisztrátor hozhat létre, és ő hívhat meg másokat is.
+        Itt látod azokat a projekteket, amelyekben részt veszel. Új projektet az adminisztrátor hozhat létre; mindenki más kérvényezheti, és a jóváhagyás után ő lesz a projekt vezetője.
       </PageTitle>
       <Suspense fallback={<Skeleton className="h-96" />}>
         <Projects />
@@ -31,17 +32,26 @@ async function Projects() {
 
   return (
     <div className="space-y-8">
-      {user.isAdmin && (
+      {user.isAdmin ? (
         <Panel title="Új projekt" icon={Plus}>
           <ProjectForm />
         </Panel>
+      ) : (
+        projects.length > 0 && (
+          <div className="flex justify-end">
+            <LinkButton href="/kervenyek" variant="secondary">
+              <Plus size={17} aria-hidden /> Új projekt kérvényezése
+            </LinkButton>
+          </div>
+        )
       )}
 
       {projects.length === 0 ? (
         <Empty
           icon={FolderKanban}
           title="Még nincs projekted"
-          text={user.isAdmin ? "Hozd létre az elsőt a fenti űrlappal, utána meghívhatod a csapatot." : "Amint meghívnak egy projektbe, itt fog megjelenni."}
+          text={user.isAdmin ? "Hozd létre az elsőt a fenti űrlappal, utána meghívhatod a csapatot." : "Kérvényezz projektindítást, vagy várd meg, amíg meghívnak egy projektbe."}
+          action={user.isAdmin ? undefined : <LinkButton href="/kervenyek">Projekt kérvényezése</LinkButton>}
         />
       ) : (
         <>

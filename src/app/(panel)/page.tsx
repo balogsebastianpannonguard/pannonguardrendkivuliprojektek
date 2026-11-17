@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
-import { AlertTriangle, ArrowRight, CircleCheck, FolderKanban, ListChecks, MailPlus, PartyPopper, Plus, Zap } from "lucide-react";
+import { AlertTriangle, ArrowRight, CircleCheck, ClipboardList, FolderKanban, ListChecks, MailPlus, PartyPopper, Plus, Zap } from "lucide-react";
+import { countPendingRequests } from "@/lib/project-requests";
 import { ProjectCard } from "@/components/project-card";
 import { Stat } from "@/components/ui";
 import { TaskCard } from "@/components/task-card";
@@ -26,7 +27,7 @@ export default function OverviewPage({ searchParams }: PageProps<"/">) {
 async function Overview({ searchParams }: Pick<PageProps<"/">, "searchParams">) {
   const [user, params] = await Promise.all([requireUser(), searchParams]);
   const now = new Date();
-  const [projects, mine, invites] = await Promise.all([listProjects(user), loadMyTasks(user), pendingInvitesFor(user.email)]);
+  const [projects, mine, invites, waiting] = await Promise.all([listProjects(user), loadMyTasks(user), pendingInvitesFor(user.email), user.isAdmin ? countPendingRequests() : 0]);
   const active = projects.filter((item) => item.project.status === "aktiv");
   const overdue = mine.groups.find((group) => group.key === "kesik")?.items.length ?? 0;
   const next = mine.groups.flatMap((group) => group.items).slice(0, 4);
@@ -66,8 +67,13 @@ async function Overview({ searchParams }: Pick<PageProps<"/">, "searchParams">) 
               ? `${active.length} aktív projekted van, ${mine.total} nyitott feladat vár rád${overdue ? `, ebből ${overdue} késik` : ""}.`
               : user.isAdmin
                 ? "Itt hozhatod létre a rendkívüli projekteket, és hívhatod meg beléjük azokat, akikkel együtt dolgoznál."
-                : "Amint meghívnak egy projektbe, itt látod a feladataidat."}
+                : "Kérvényezz projektindítást, vagy várd meg a meghívást: a projektjeid és a feladataid itt jelennek meg."}
           </p>
+          {!user.isAdmin && (
+            <Link href="/kervenyek" className="pg-button mt-6 inline-flex h-12 items-center gap-2 rounded-xl px-6 font-semibold">
+              <Plus size={18} aria-hidden /> Projekt kérvényezése
+            </Link>
+          )}
           {user.isAdmin && (
             <Link href="/projektek" className="pg-button mt-6 inline-flex h-12 items-center gap-2 rounded-xl px-6 font-semibold">
               <Plus size={18} aria-hidden /> Új projekt
@@ -75,6 +81,16 @@ async function Overview({ searchParams }: Pick<PageProps<"/">, "searchParams">) 
           )}
         </div>
       </section>
+
+      {waiting > 0 && (
+        <Link href="/kervenyek" className="pg-rise flex items-center gap-4 rounded-2xl border border-volt/35 bg-volt/10 p-5 transition hover:bg-volt/15">
+          <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-volt/20 text-volt">
+            <ClipboardList size={22} aria-hidden />
+          </span>
+          <p className="flex-1 font-semibold">{waiting} projektindítási kérvény vár jóváhagyásra</p>
+          <ArrowRight size={18} aria-hidden className="text-volt" />
+        </Link>
+      )}
 
       {invites.length > 0 && (
         <Link href="/meghivasaim" className="pg-rise flex items-center gap-4 rounded-2xl border border-ember/40 bg-ember/10 p-5 transition hover:bg-ember/15">

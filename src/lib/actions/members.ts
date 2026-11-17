@@ -102,7 +102,7 @@ export async function memberResetLink(userId: string): Promise<{ error?: string;
   const id = parseId(userId);
   const target = id ? await findUserById(id) : null;
   if (!target) return { error: "A felhasználó nem található." };
-  if (target.kind === "admin") return { error: "Adminisztrátor jelszavát az Elosztóból lehet visszaállítani." };
+  if (target.kind === "admin" || target.invitationId) return { error: "Az Elosztóból meghívott felhasználó jelszavát az Elosztóból lehet visszaállítani." };
   const token = await issueLocalReset(target._id);
   return { link: `${!isPortal && PORTAL_URL ? PORTAL_URL : appBaseUrl(await origin())}/jelszo-visszaallitas?token=${token}`, email: target.email };
 }

@@ -6,7 +6,7 @@ import { cookies } from "next/headers";
 import { connection } from "next/server";
 import { redirect } from "next/navigation";
 import { getAccessState } from "@/lib/invitations";
-import { adminAllowed, isPortal } from "@/lib/mode";
+import { adminAllowed, mayEnter } from "@/lib/mode";
 import { getDb } from "@/lib/mongodb";
 import { type UserDocument, type UserKind } from "@/lib/users";
 
@@ -130,6 +130,8 @@ export type CurrentUser = {
   firstName: string;
   kind: UserKind;
   isAdmin: boolean;
+  /** Az Elosztóból meghívott fiók (a jelszó-visszaállítás is onnan megy). */
+  viaHub: boolean;
   invitedBy: string;
   lastLoginAt?: Date;
   createdAt: Date;
@@ -144,10 +146,9 @@ export const requireUser = cache(async (): Promise<CurrentUser & { session: Sess
   const found = await sessionWithUser((await cookies()).get(SESSION_COOKIE)?.value);
   if (!found || !found.user) redirect("/login");
   const user = found.user;
-  // Az admin felületre csak a jogosult admin, a portálra csak a meghívott tagok léphetnek be.
-  const wrongPlace = isPortal ? user.kind !== "tag" : user.kind !== "admin" || !adminAllowed(user.email);
-  let revoked = Boolean(user.disabledAt) || wrongPlace;
-  if (!revoked && user.kind === "admin" && user.invitationId) revoked = await adminRevoked(user.invitationId);
+  // Az Elosztóból meghívott fiókok hozzáférését az Elosztó vonja vissza; a belépés helyét a `mayEnter` dönti el.
+  let revoked = Boolean(user.disabledAt) || !mayEnter(user);
+  if (!revoked && user.invitationId) revoked = await adminRevoked(user.invitationId);
   if (revoked) {
     await (await sessions()).deleteOne({ _id: found.id });
     redirect("/login?ok=visszavonva");
@@ -161,7 +162,8 @@ export const requireUser = cache(async (): Promise<CurrentUser & { session: Sess
     // Magyar névsorrend: a vezetéknév után az első keresztnév.
     firstName: user.name.trim().split(/\s+/)[1] ?? user.name,
     kind: user.kind,
-    isAdmin: user.kind === "admin",
+    isAdmin: user.kind === "admin" && adminAllowed(user.email),
+    viaHub: Boolean(user.invitationId),
     invitedBy: user.invitedBy,
     lastLoginAt: user.lastLoginAt,
     createdAt: user.createdAt,

@@ -38,7 +38,7 @@ export async function loadBriefing(user: CurrentUser): Promise<BriefingItem[]> {
   if (dueSoon.length) items.push({ tone: "info", text: `${dueSoon.length} projekt határideje a következő két hétben jár le.`, href: "/projektek" });
 
   if (!projects.length) {
-    items.push({ tone: "info", text: user.isAdmin ? "Még nincs projekted: hozd létre az elsőt, és hívd meg a csapatot." : "Még nem vagy tagja egy projektnek sem.", href: "/projektek" });
+    items.push({ tone: "info", text: user.isAdmin ? "Még nincs projekted: hozd létre az elsőt, és hívd meg a csapatot." : "Még nem vagy tagja egy projektnek sem: kérvényezhetsz projektindítást a Kérvények oldalon.", href: "/projektek" });
   }
   if (!items.some((item) => item.tone === "bad" || item.tone === "warn")) {
     items.unshift({ tone: "ok", text: "Minden rendben, nincs késő feladatod. ⚡", href: "/feladataim" });

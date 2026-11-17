@@ -5,7 +5,7 @@ import { ObjectId } from "mongodb";
 import { redirect } from "next/navigation";
 import { recordAudit } from "@/lib/audit";
 import { addEvent, checkInvitationToken, checkResetToken, markLogin, redeemInvitation, redeemResetToken, undoRedeem, getAccessState } from "@/lib/invitations";
-import { ADMIN_URL, PORTAL_URL, adminAllowed, isPortal } from "@/lib/mode";
+import { ADMIN_URL, PORTAL_URL, adminAllowed, isPortal, mayEnter } from "@/lib/mode";
 import { hashPassword, passwordProblem, verifyPassword } from "@/lib/password";
 import { addMember, checkInvite, redeemInvite } from "@/lib/project-invites";
 import { logActivity } from "@/lib/projects";
@@ -31,7 +31,6 @@ export async function register(_previous: RegisterState, formData: FormData): Pr
     if (isPortal) return { error: "Itt nem lehet adminisztrátori fiókot nyitni.", name };
     const invitation = await checkInvitationToken(token);
     if (invitation.status !== "valid") return { error: "Ez a meghívó már nem érvényes. Kérj újat az adminisztrátortól.", name };
-    if (!adminAllowed(invitation.email)) return { error: "Ehhez a felülethez ez a cím nem jogosult.", name };
     if (!validName(name)) return { error: NAME_ERROR, name };
     const problem = passwordProblem(password, invitation.email);
     if (problem) return { error: problem, name };
@@ -47,7 +46,8 @@ export async function register(_previous: RegisterState, formData: FormData): Pr
         _id: new ObjectId(),
         email: redeemed.email.toLowerCase(),
         name,
-        kind: "admin",
+        // Az adminok a megadott címek; mindenki más az Elosztóból meghívott felhasználó, aki csak a saját projektjeit látja.
+        kind: adminAllowed(redeemed.email) ? "admin" : "tag",
         passwordHash,
         invitationId: redeemed._id,
         invitedBy: redeemed.invitedBy,
@@ -80,16 +80,16 @@ export async function register(_previous: RegisterState, formData: FormData): Pr
 /**
  * Ha a címhez régebbi adminfiók tartozik, amelynek a meghívóját az Elosztóban törölték (vagy vissza van vonva),
  * az új, érvényes meghívó beváltása újraindítja a fiókot: új jelszó, tiszta munkamenetek.
- * Tagfiókot és élő hozzáférésű fiókot nem vesz át.
+ * Csak Elosztóból létrehozott fiókot vesz át (projektmeghívóval jött tagot nem), élő hozzáférésűt sem.
  */
 async function reclaimOrphanedAdmin(email: string, invitationId: ObjectId, invitedBy: string, name: string, passwordHash: string) {
   const existing = await findUserByEmail(email);
-  if (!existing || existing.kind !== "admin" || !existing.invitationId || existing.invitationId.equals(invitationId)) return null;
+  if (!existing || !existing.invitationId || existing.invitationId.equals(invitationId)) return null;
   if (!(await getAccessState(existing.invitationId)).revoked) return null;
 
   const updated = await (await users()).findOneAndUpdate(
     { _id: existing._id, invitationId: existing.invitationId },
-    { $set: { name, passwordHash, invitationId, invitedBy, createdAt: new Date(), lastLoginAt: new Date() }, $unset: { disabledAt: "" } },
+    { $set: { name, passwordHash, invitationId, invitedBy, kind: adminAllowed(existing.email) ? "admin" : "tag", createdAt: new Date(), lastLoginAt: new Date() }, $unset: { disabledAt: "" } },
   );
   if (!updated) return null;
   await destroyAllSessions(existing._id);
@@ -192,10 +192,10 @@ export async function login(_previous: LoginState, formData: FormData): Promise<
     if (isPortal && user.kind !== "tag") {
       return { email, error: `Ez a belépés a meghívott munkatársaknak szól.${ADMIN_URL ? " Az adminisztrátori felület címe másik." : ""}` };
     }
-    if (!isPortal && (user.kind !== "admin" || !adminAllowed(user.email))) {
+    if (!isPortal && !mayEnter(user)) {
       return { email, error: `Ez a felület nem a munkatársaké. A saját belépőoldalad a meghívó levélben kapott portál${PORTAL_URL ? `: ${PORTAL_URL}` : ""}.` };
     }
-    if (user.kind === "admin" && user.invitationId) {
+    if (user.invitationId) {
       if ((await getAccessState(user.invitationId)).revoked) return { email, error: "A hozzáférésedet visszavonták." };
       await markLogin(user.invitationId);
     }
